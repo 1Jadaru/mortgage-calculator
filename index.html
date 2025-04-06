@@ -94,7 +94,209 @@
 
   <div class="container">
     <h1 id="top">Mortgage Refinance Calculator</h1>
-    <!-- Additional form sections and script are assumed included -->
+
+    <details id="currentMortgage" open>
+      <summary>Current Mortgage</summary>
+      <label>Original Loan Amount: <input type="number" id="currentAmount" /></label>
+      <label>Interest Rate (%): <input type="number" step="0.01" id="currentRate" /></label>
+      <label>Loan Term (Years): <input type="number" id="currentTerm" /></label>
+      <label>Years Paid So Far: <input type="number" id="yearsPaid" /></label>
+    </details>
+
+    <details id="refinanceScenario" open>
+      <summary>Refinance Scenario</summary>
+      <label>New Interest Rate (%): <input type="number" step="0.01" id="newRate" /></label>
+      <label>New Loan Term (Years): <input type="number" id="newTerm" /></label>
+      <label>Refinance Costs ($): <input type="number" id="refiCosts" value="0" /></label>
+      <label>Cash Out Amount ($): <input type="number" id="cashOut" value="0" /></label>
+    </details>
+
+    <button onclick="compareLoans()">Compare</button>
+
+    <details class="results" id="results">
+      <summary>Results</summary>
+      <div id="resultsContent"></div>
+    </details>
+
+    <details id="amortizationOld">
+      <summary>Original Loan Amortization Schedule</summary>
+    </details>
+
+    <details id="amortizationNew">
+      <summary>Refinanced Loan Amortization Schedule</summary>
+    </details>
+
+    <canvas id="loanBalanceChart"></canvas>
   </div>
+
+  <script>
+    function formatNumber(num) {
+      return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function calculateMonthlyPayment(principal, rate, years) {
+      const monthlyRate = rate / 100 / 12;
+      const n = years * 12;
+      return (principal * monthlyRate) / (1 - Math.pow(1 + monthlyRate, -n));
+    }
+
+    function generateAmortizationSchedule(principal, rate, termYears) {
+      const monthlyRate = rate / 100 / 12;
+      const totalPayments = termYears * 12;
+      const monthlyPayment = calculateMonthlyPayment(principal, rate, termYears);
+      let balance = principal;
+      let schedule = `<table><tr><th>Month</th><th>Payment</th><th>Principal</th><th>Interest</th><th>Balance</th></tr>`;
+
+      for (let i = 1; i <= totalPayments; i++) {
+        const interest = balance * monthlyRate;
+        const principalPaid = monthlyPayment - interest;
+        balance -= principalPaid;
+        schedule += `<tr><td>${i}</td><td>$${formatNumber(monthlyPayment)}</td><td>$${formatNumber(principalPaid)}</td><td>$${formatNumber(interest)}</td><td>$${formatNumber(Math.max(balance, 0))}</td></tr>`;
+      }
+      schedule += `</table>`;
+      return schedule;
+    }
+
+    function validateInputs() {
+      const requiredFields = [
+        'currentAmount', 'currentRate', 'currentTerm', 'yearsPaid',
+        'newRate', 'newTerm', 'refiCosts', 'cashOut'
+      ];
+      for (const id of requiredFields) {
+        const value = parseFloat(document.getElementById(id).value);
+        if (isNaN(value) || value < 0) {
+          alert("Please enter valid, non-negative numbers for all fields.");
+          return false;
+        }
+      }
+      const term = parseInt(document.getElementById('currentTerm').value);
+      const yearsPaid = parseInt(document.getElementById('yearsPaid').value);
+      if (yearsPaid > term) {
+        alert("Years paid cannot exceed the original loan term.");
+        return false;
+      }
+      return true;
+    }
+
+    function getBalanceData(principal, rate, years) {
+      const monthlyRate = rate / 100 / 12;
+      const totalPayments = years * 12;
+      const monthlyPayment = calculateMonthlyPayment(principal, rate, years);
+      let balance = principal;
+      const balances = [];
+      for (let i = 1; i <= totalPayments; i++) {
+        const interest = balance * monthlyRate;
+        const principalPaid = monthlyPayment - interest;
+        balance -= principalPaid;
+        balances.push(Math.max(balance, 0));
+      }
+      return balances;
+    }
+
+    function renderChart(originalData, refinanceData) {
+      const ctx = document.getElementById('loanBalanceChart').getContext('2d');
+      if (window.loanChart) window.loanChart.destroy();
+
+      window.loanChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: Array.from({ length: originalData.length }, (_, i) => i + 1),
+          datasets: [
+            {
+              label: 'Original Loan Balance',
+              data: originalData,
+              borderColor: 'rgba(255, 99, 132, 1)',
+              fill: false
+            },
+            {
+              label: 'Refinanced Loan Balance',
+              data: refinanceData,
+              borderColor: 'rgba(54, 162, 235, 1)',
+              fill: false
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            title: {
+              display: true,
+              text: 'Loan Balance Over Time (Original vs. Refinance)'
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              title: {
+                display: true,
+                text: 'Balance ($)'
+              }
+            },
+            x: {
+              title: {
+                display: true,
+                text: 'Month'
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function compareLoans() {
+      if (!validateInputs()) return;
+
+      const P = parseFloat(document.getElementById('currentAmount').value);
+      const r1 = parseFloat(document.getElementById('currentRate').value);
+      const term1 = parseInt(document.getElementById('currentTerm').value);
+      const yearsPaid = parseInt(document.getElementById('yearsPaid').value);
+
+      const r2 = parseFloat(document.getElementById('newRate').value);
+      const term2 = parseInt(document.getElementById('newTerm').value);
+      const refiCosts = parseFloat(document.getElementById('refiCosts').value);
+      const cashOut = parseFloat(document.getElementById('cashOut').value);
+
+      const monthsPaid = yearsPaid * 12;
+      const monthlyOld = calculateMonthlyPayment(P, r1, term1);
+      let balance = P;
+
+      for (let i = 0; i < monthsPaid; i++) {
+        const interest = balance * (r1 / 100 / 12);
+        const principal = monthlyOld - interest;
+        balance -= principal;
+      }
+
+      const newPrincipal = balance + cashOut;
+      const newMonthly = calculateMonthlyPayment(newPrincipal, r2, term2);
+
+      const totalOldRemaining = monthlyOld * (term1 * 12 - monthsPaid);
+      const totalNew = newMonthly * (term2 * 12) + refiCosts;
+
+      const savings = totalOldRemaining - totalNew;
+      const breakEven = refiCosts / (monthlyOld - newMonthly);
+
+      document.getElementById('resultsContent').innerHTML = `
+        <h2>Comparison Results</h2>
+        Monthly Payment (Old): $${formatNumber(monthlyOld)}<br>
+        Monthly Payment (New): $${formatNumber(newMonthly)}<br>
+        Remaining Balance: $${formatNumber(balance)}<br>
+        Cash Out Amount: $${formatNumber(cashOut)}<br>
+        Total New Loan Amount: $${formatNumber(newPrincipal)}<br>
+        Total Remaining on Old Loan: $${formatNumber(totalOldRemaining)}<br>
+        Total Cost with Refi: $${formatNumber(totalNew)}<br>
+        Estimated Savings: $${formatNumber(savings)}<br>
+        Break-even Time: ${formatNumber(breakEven)} months
+      `;
+
+      document.getElementById('amortizationOld').innerHTML = `<summary>Original Loan Amortization Schedule</summary>` + generateAmortizationSchedule(P, r1, term1);
+      document.getElementById('amortizationNew').innerHTML = `<summary>Refinanced Loan Amortization Schedule</summary>` + generateAmortizationSchedule(newPrincipal, r2, term2);
+
+      const originalBalanceData = getBalanceData(P, r1, term1).slice(monthsPaid);
+      const refiBalanceData = getBalanceData(newPrincipal, r2, term2);
+
+      renderChart(originalBalanceData, refiBalanceData);
+    }
+  document.querySelectorAll('details').forEach(el => el.setAttribute('open', true));
+  </script>
 </body>
 </html>
