@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mortgage Refinance Calculator</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; padding: 0; }
+    h1 { font-size: 24px; }
+    .section { margin-bottom: 30px; }
+    label { display: block; margin-top: 10px; }
+    input { padding: 5px; width: 200px; }
+    button { margin-top: 20px; padding: 10px 15px; font-size: 16px; }
+    .results { margin-top: 20px; font-weight: bold; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: right; }
+    th { background-color: #f0f0f0; }
+    .nav-links { margin: 20px 0; display: flex; flex-wrap: wrap; gap: 15px; }
+    .nav-links a { text-decoration: none; color: blue; font-weight: bold; }
+    .sticky-nav { position: sticky; top: 0; background: #fff; padding: 10px 0; z-index: 100; border-bottom: 1px solid #ccc; }
+    details { margin-bottom: 20px; }
+    summary { font-size: 18px; font-weight: bold; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <a name="top"></a>
+  <div class="sticky-nav nav-links">
+    <a href="#top">Top</a>
+    <a href="#currentMortgage">Current Mortgage</a>
+    <a href="#refinanceScenario">Refinance Scenario</a>
+    <a href="#results">Results</a>
+    <a href="#amortizationOld">Original Loan Schedule</a>
+    <a href="#amortizationNew">Refinance Loan Schedule</a>
+  </div>
+
+  <h1>Mortgage Refinance Calculator</h1>
+
+  <details class="section" id="currentMortgage" open>
+    <summary>Current Mortgage</summary>
+    <label>Original Loan Amount: <input type="number" id="currentAmount" /></label>
+    <label>Interest Rate (%): <input type="number" step="0.01" id="currentRate" /></label>
+    <label>Loan Term (Years): <input type="number" id="currentTerm" /></label>
+    <label>Years Paid So Far: <input type="number" id="yearsPaid" /></label>
+  </details>
+
+  <details class="section" id="refinanceScenario" open>
+    <summary>Refinance Scenario</summary>
+    <label>New Interest Rate (%): <input type="number" step="0.01" id="newRate" /></label>
+    <label>New Loan Term (Years): <input type="number" id="newTerm" /></label>
+    <label>Refinance Costs ($): <input type="number" id="refiCosts" value="0" /></label>
+    <label>Cash Out Amount ($): <input type="number" id="cashOut" value="0" /></label>
+  </details>
+
+  <button onclick="compareLoans()">Compare</button>
+
+  <details class="section" id="results">
+    <summary>Results</summary>
+    <div class="results" id="resultsContent"></div>
+  </details>
+
+  <details class="section" id="amortizationOld">
+    <summary>Original Loan Amortization Schedule</summary>
+  </details>
+
+  <details class="section" id="amortizationNew">
+    <summary>Refinanced Loan Amortization Schedule</summary>
+  </details>
+
+  <script>
+    function formatNumber(num) {
+      return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function calculateMonthlyPayment(principal, rate, years) {
+      const monthlyRate = rate / 100 / 12;
+      const n = years * 12;
+      return (principal * monthlyRate) / (1 - Math.pow(1 + monthlyRate, -n));
+    }
+
+    function generateAmortizationSchedule(principal, rate, termYears) {
+      const monthlyRate = rate / 100 / 12;
+      const totalPayments = termYears * 12;
+      const monthlyPayment = calculateMonthlyPayment(principal, rate, termYears);
+      let balance = principal;
+      let schedule = `<table><tr><th>Month</th><th>Payment</th><th>Principal</th><th>Interest</th><th>Balance</th></tr>`;
+
+      for (let i = 1; i <= totalPayments; i++) {
+        const interest = balance * monthlyRate;
+        const principalPaid = monthlyPayment - interest;
+        balance -= principalPaid;
+        schedule += `<tr><td>${i}</td><td>$${formatNumber(monthlyPayment)}</td><td>$${formatNumber(principalPaid)}</td><td>$${formatNumber(interest)}</td><td>$${formatNumber(Math.max(balance, 0))}</td></tr>`;
+      }
+      schedule += `</table>`;
+      return schedule;
+    }
+
+    function compareLoans() {
+      const P = parseFloat(document.getElementById('currentAmount').value);
+      const r1 = parseFloat(document.getElementById('currentRate').value);
+      const term1 = parseInt(document.getElementById('currentTerm').value);
+      const yearsPaid = parseInt(document.getElementById('yearsPaid').value);
+
+      const r2 = parseFloat(document.getElementById('newRate').value);
+      const term2 = parseInt(document.getElementById('newTerm').value);
+      const refiCosts = parseFloat(document.getElementById('refiCosts').value);
+      const cashOut = parseFloat(document.getElementById('cashOut').value);
+
+      const monthsPaid = yearsPaid * 12;
+      const monthlyOld = calculateMonthlyPayment(P, r1, term1);
+      let balance = P;
+
+      for (let i = 0; i < monthsPaid; i++) {
+        const interest = balance * (r1 / 100 / 12);
+        const principal = monthlyOld - interest;
+        balance -= principal;
+      }
+
+      const newPrincipal = balance + cashOut;
+      const newMonthly = calculateMonthlyPayment(newPrincipal, r2, term2);
+
+      const totalOldRemaining = monthlyOld * (term1 * 12 - monthsPaid);
+      const totalNew = newMonthly * (term2 * 12) + refiCosts;
+
+      const savings = totalOldRemaining - totalNew;
+      const breakEven = refiCosts / (monthlyOld - newMonthly);
+
+      document.getElementById('resultsContent').innerHTML = `
+        Monthly Payment (Old): $${formatNumber(monthlyOld)}<br>
+        Monthly Payment (New): $${formatNumber(newMonthly)}<br>
+        Remaining Balance: $${formatNumber(balance)}<br>
+        Cash Out Amount: $${formatNumber(cashOut)}<br>
+        Total New Loan Amount: $${formatNumber(newPrincipal)}<br>
+        Total Remaining on Old Loan: $${formatNumber(totalOldRemaining)}<br>
+        Total Cost with Refi: $${formatNumber(totalNew)}<br>
+        Estimated Savings: $${formatNumber(savings)}<br>
+        Break-even Time: ${formatNumber(breakEven)} months
+      `;
+
+      document.getElementById('amortizationOld').innerHTML = `<summary>Original Loan Amortization Schedule</summary>` + generateAmortizationSchedule(P, r1, term1);
+      document.getElementById('amortizationNew').innerHTML = `<summary>Refinanced Loan Amortization Schedule</summary>` + generateAmortizationSchedule(newPrincipal, r2, term2);
+    }
+  </script>
+</body>
+</html>
